@@ -61,7 +61,6 @@ def usage():
 	print("The font package manager for MacOS.")
 	print("usage: python3 fontman.py (install | download | remove | search | info) <font-id>")
 	print("Additional commands:")
-	print("init")
 	print("list")
 
 def unzip(filename):
@@ -90,6 +89,21 @@ def list_installed_fonts():
 			print(font["font-id"])
 
 def add_to_installed(filename, package):
+	installed = load_installed()
+
+	if is_installed(package):
+		pack = binary_search(installed, package, 0, len(installed)-1)
+		pack["files"].append({"file": f"{filename}"})
+	else:
+		font = {}
+		font["font-id"] = package
+		font["files"] = []
+		font["files"].append({"file": f"{filename}"})
+		installed.append(font)
+	write_installed(sorted(installed, key=lambda x: x["font-id"]))
+
+
+def add_to_installed2(filename, package):
 	with open("installed.json", "r+") as file:
 
 		x = file.read()
@@ -126,13 +140,16 @@ def extract_tar(filename):
 	clear_font_dir()
 	tarf.extractall("./fonts")
 
+def printgab(special, rem):
+	print(f"{colored(special, "green", attrs=["bold"])} {rem}")
+
 def install(package: str):
 
 	if is_installed(package):
 		print(f"{package} is already installed.")
 		return
 
-	print(f"{colored(":: Installing font", "green", attrs=["bold"])} {package}...")
+	printgab(":: Installing font", f"{package}...")
 	item = binary_search(database, package, 0, len(database)-1)
 
 	if is_error(item):
@@ -181,10 +198,45 @@ def install(package: str):
 	
 	
 def remove(package: str):
-	print(f"{colored(":: Removing font", "green", attrs=["bold"])} {package}...")
 
-def init():
-	print(colored(":: Initializing...", attrs=["bold"]))
+	if not is_installed(package):
+		print(f"{package} is not installed.")
+		return
+	
+	printgab(":: Removing font", f"{package}...")
+	
+	installed = load_installed()
+	font = binary_search(installed, package, 0, len(installed)-1)
+
+	fontdir = os.path.join(os.path.join(os.path.expanduser('~')), 'Library/Fonts')
+	for item in font["files"]:
+		os.remove(f"{fontdir}/{item["file"]}")
+
+	remove_from_installed(package)
+
+	printgab(":: Successfully removed font", package)
+
+def write_installed(new_json):
+	with open("installed.json", "r+") as file:
+		file.seek(0)
+		file.truncate()
+		file.write(json.dumps(new_json, indent=4))
+
+
+def remove_from_installed(font_id):
+	if not is_installed(font_id):
+		return
+	installed: list = load_installed()
+	to_remove = 0
+	for idx, item in enumerate(installed):
+		if item["font-id"] == font_id:
+			to_remove = idx
+			break
+	del installed[to_remove]
+	write_installed(installed)
+
+			
+	
 
 def info(package: str):
 	item = binary_search(database, package, 0, len(database)-1)
