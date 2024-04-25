@@ -10,19 +10,21 @@ from termcolor import colored
 
 database = []
 
-def binary_search(target, lo, hi):
-	global database
+def binary_search(array, target, lo, hi):
 	midpoint = (hi+lo)//2
 
 	if lo > hi:
 		return { "Error": "Font not found." }
-
-	if database[midpoint]["font-id"] == target:
-		return database[midpoint]
-	elif database[midpoint]["font-id"] > target:
-		return binary_search(target, lo, midpoint)
-	else:
-		return binary_search(target, midpoint, hi)
+	
+	try:
+		if array[midpoint]["font-id"] == target:
+			return array[midpoint]
+		elif array[midpoint]["font-id"] > target:
+			return binary_search(array, target, lo, midpoint)
+		else:
+			return binary_search(array, target, midpoint, hi)
+	except:
+		return { "Error": "Font not found." }
 	
 def get_filename(link: str):
 	return link.split('/')[-1]
@@ -52,7 +54,7 @@ def main():
 	fonts = []
 	with open("index.json", "r") as file:
 		fonts = json.loads(file.read())
-	database = sorted(fonts, key=lambda x: x["font-id"])
+	database = fonts
 	parse()
 
 def usage():
@@ -62,27 +64,119 @@ def usage():
 	print("init")
 	print("list")
 
+def unzip(filename):
+	print(f"{colored("Unpacking", "green", attrs=["bold"])} {filename}...")
+	zipf = zipfile.ZipFile(f"./fonts/{filename}")
+	clear_font_dir()
+	zipf.extractall("./fonts")
+
+def error(string):
+	print(f"{colored("Error:", "red", attrs=["bold"])} {string}")
+
+def clear_font_dir():
+	for item in os.listdir("./fonts"):
+		os.remove(f"./fonts/{item}")
+
+def list_installed_fonts():
+	with open("installed.json", "r+") as file:
+		x = file.read()
+
+		if x == "":
+			return
+		
+		installed = json.loads(x)
+		
+		for font in installed:
+			print(font["font-id"])
+
+def add_to_installed(filename, package):
+	with open("installed.json", "r+") as file:
+
+		x = file.read()
+		
+		if x == "":
+			allf = []
+			font = {}
+			font["font-id"] = package
+			font["files"] = []
+			font["files"].append({"file": filename})
+			allf.append(font)
+			file.write(json.dumps(allf, indent=4))
+			return
+
+		items = json.loads(x)
+		pack = binary_search(items, package, 0, len(items)-1)
+		file.seek(0)
+		file.truncate()
+		if is_error(pack):
+			font = {}
+			font["font-id"] = package
+			font["files"] = []
+			font["files"].append({"file": filename})
+			items.append(font)
+			file.write(json.dumps(sorted(items, key=lambda x: x["font-id"]), indent=4))
+			return
+		else:
+			pack["files"].append({"file": filename})
+			file.write(json.dumps(items, indent=4))
+		
+def extract_tar(filename):
+	print(f"{colored("Unpacking", "green", attrs=["bold"])} {filename}...")
+	tarf = tarfile.TarFile(f"./fonts/{filename}")
+	clear_font_dir()
+	tarf.extractall("./fonts")
+
 def install(package: str):
+
+	if is_installed(package):
+		print(f"{package} is already installed.")
+		return
+
 	print(f"{colored(":: Installing font", "green", attrs=["bold"])} {package}...")
-	item = binary_search(package, 0, len(database)-1)
+	item = binary_search(database, package, 0, len(database)-1)
+
 	if is_error(item):
 		return
+	
 	print(f"{colored("Downloading from", "green", attrs=["bold"])} {item["download"]}")
-	dwnld = requests.get(item["download"], allow_redirects=True)
+
+	try:
+		dwnld = requests.get(item["download"], allow_redirects=True)
+	except:
+		error("An error occured downloading the font. Aborting")
+		return
+	
 	filename = get_filename(dwnld.url)
 	print(f"{colored("Retrieved file", "green", attrs=["bold"])} {filename}")
+
 	with open(f"./fonts/{filename}", 'wb') as file:
 		file.write(dwnld.content)
-	#shutil.move(f"./{filename}", f"Desktop")
+
 	if filename.endswith(".zip"):
-		print(f"{colored("Unpacking", "green", attrs=["bold"])} {filename}...")
-		zipf = zipfile.ZipFile(f"./fonts/{filename}")
+		try:
+			unzip(filename)
+		except zipfile.BadZipFile:
+			error("Retrieved file is a bad zip file, or not a zip file at all. Aborting.")
+			clear_font_dir()
+			return
+	elif filename.endswith(".tar.gz"):
+		try:
+			extract_tar(filename)
+		except:
+			error("Retrieved file is a bad tar file, or not a tar file at all. Aborting.")
+			clear_font_dir()
+			return
+		
+	try:
+		fontdir = os.path.join(os.path.join(os.path.expanduser('~')), 'Library/Fonts') 
 		for item in os.listdir("./fonts"):
-			os.remove(f"./fonts/{filename}")
-		zipf.extractall("./fonts")
-	desktop = os.path.join(os.path.join(os.path.expanduser('~')), 'Desktop') 
-	for item in os.listdir("./fonts"):
-		shutil.move(f"./fonts/{item}", desktop)
+			shutil.move(f"./fonts/{item}", fontdir)
+			add_to_installed(item, package)
+	except:
+		error("An error occurred while moving font files. Aborting.")
+		return
+
+	print(f"{colored("Moving font assets to", "green", attrs=["bold"])} {fontdir}")
 	print(f"{colored(":: Sucessfully installed", "green", attrs=["bold"])} {package}!")
 	
 	
@@ -93,7 +187,7 @@ def init():
 	print(colored(":: Initializing...", attrs=["bold"]))
 
 def info(package: str):
-	item = binary_search(package, 0, len(database)-1)
+	item = binary_search(database, package, 0, len(database)-1)
 	print_font(item)
 
 def search(query: str):
@@ -101,6 +195,20 @@ def search(query: str):
 
 def download(package):
 	pass
+
+def load_installed() -> list:
+	with open("installed.json", "r+") as file:
+		x = file.read()
+		if x == "":
+			return []
+		return json.loads(x)
+
+def is_installed(font_id) -> bool:
+	x: list = load_installed()
+	if len(x) == 0:
+		return False
+	ids = [font["font-id"] for font in x]
+	return font_id in ids
 
 def parse():
 	if len(argv) == 1:
@@ -120,11 +228,11 @@ def parse():
 		case "download":
 			download(argv[2])
 
+		case "list":
+			list_installed_fonts()
+
 		case "info":
 			info(argv[2])
-
-		case "init":
-			init()
 
 		case "-h":
 			usage()
