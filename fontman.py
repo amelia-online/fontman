@@ -102,37 +102,6 @@ def add_to_installed(filename, package):
 		installed.append(font)
 	write_installed(sorted(installed, key=lambda x: x["font-id"]))
 
-
-def add_to_installed2(filename, package):
-	with open("installed.json", "r+") as file:
-
-		x = file.read()
-		
-		if x == "":
-			allf = []
-			font = {}
-			font["font-id"] = package
-			font["files"] = []
-			font["files"].append({"file": filename})
-			allf.append(font)
-			file.write(json.dumps(allf, indent=4))
-			return
-
-		items = json.loads(x)
-		pack = binary_search(items, package, 0, len(items)-1)
-		file.seek(0)
-		file.truncate()
-		if is_error(pack):
-			font = {}
-			font["font-id"] = package
-			font["files"] = []
-			font["files"].append({"file": filename})
-			items.append(font)
-			file.write(json.dumps(sorted(items, key=lambda x: x["font-id"]), indent=4))
-			return
-		else:
-			pack["files"].append({"file": filename})
-			file.write(json.dumps(items, indent=4))
 		
 def extract_tar(filename):
 	print(f"{colored("Unpacking", "green", attrs=["bold"])} {filename}...")
@@ -153,6 +122,7 @@ def install(package: str):
 	item = binary_search(database, package, 0, len(database)-1)
 
 	if is_error(item):
+		error(f"Could not find font '{item}'")
 		return
 	
 	print(f"{colored("Downloading from", "green", attrs=["bold"])} {item["download"]}")
@@ -163,7 +133,7 @@ def install(package: str):
 		error("An error occured downloading the font. Aborting")
 		return
 	
-	filename = get_filename(dwnld.url)
+	filename = get_filename(item["download"])
 	print(f"{colored("Retrieved file", "green", attrs=["bold"])} {filename}")
 
 	with open(f"./fonts/{filename}", 'wb') as file:
@@ -206,11 +176,15 @@ def remove(package: str):
 	printgab(":: Removing font", f"{package}...")
 	
 	installed = load_installed()
-	font = binary_search(installed, package, 0, len(installed)-1)
+	font = binary_search(installed, package, 0, len(installed))
 
 	fontdir = os.path.join(os.path.join(os.path.expanduser('~')), 'Library/Fonts')
+
 	for item in font["files"]:
-		os.remove(f"{fontdir}/{item["file"]}")
+		if os.path.isdir(f"{fontdir}/{item["file"]}"):
+			shutil.rmtree(f"{fontdir}/{item["file"]}")
+		else:
+			os.remove(f"{fontdir}/{item["file"]}")
 
 	remove_from_installed(package)
 
@@ -235,15 +209,23 @@ def remove_from_installed(font_id):
 	del installed[to_remove]
 	write_installed(installed)
 
-			
-	
-
 def info(package: str):
 	item = binary_search(database, package, 0, len(database)-1)
 	print_font(item)
 
 def search(query: str):
 	print(f"{colored(":: Searching for font", "green", attrs=["bold"])} {colored(query, attrs=["bold"])}...")
+	matched = []
+	for font in database:
+		try:
+			if re.match(query, font["font-id"]):
+				matched.append(font)
+		except:
+			error("Invalid query entered.")
+			return
+	printgab("Found", f"{colored(len(matched), "white", attrs=["bold"])} matches.")
+	for match in matched:
+		print(match["font-id"])
 
 def download(package):
 	pass
