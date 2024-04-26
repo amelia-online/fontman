@@ -92,7 +92,7 @@ def add_to_installed(filename, package):
 	installed = load_installed()
 
 	if is_installed(package):
-		pack = binary_search(installed, package, 0, len(installed)-1)
+		pack = binary_search(installed, package, 0, len(installed))
 		pack["files"].append({"file": f"{filename}"})
 	else:
 		font = {}
@@ -119,7 +119,7 @@ def install(package: str):
 		return
 
 	printgab(":: Installing font", f"{package}...")
-	item = binary_search(database, package, 0, len(database)-1)
+	item = binary_search(database, package, 0, len(database))
 
 	if is_error(item):
 		error(f"Could not find font '{item}'")
@@ -210,7 +210,7 @@ def remove_from_installed(font_id):
 	write_installed(installed)
 
 def info(package: str):
-	item = binary_search(database, package, 0, len(database)-1)
+	item = binary_search(database, package, 0, len(database))
 	print_font(item)
 
 def search(query: str):
@@ -228,7 +228,22 @@ def search(query: str):
 		print(match["font-id"])
 
 def download(package):
-	pass
+	printgab(":: Downloading font", package)
+	pack = binary_search(database, package, 0, len(database))
+	if is_error(pack):
+		error(f"Could not find font {pack}")
+		return
+	try:
+		x = requests.get(pack["download"])
+		filename = get_filename(pack["download"])
+		with open(f"./fonts/{filename}", "wb") as file:
+			file.write(x.content)
+	except:
+		error("An error occured downloading this font.")
+		return
+	downloadpath = os.path.join(os.path.join(os.path.expanduser("~")), "Downloads")
+	shutil.move(f"./fonts/{filename}", downloadpath)
+	printgab(":: Sucessfully downloaded font", f"{package}!")
 
 def load_installed() -> list:
 	with open("installed.json", "r+") as file:
@@ -257,7 +272,6 @@ def parse():
 
 		case "search":
 			search(argv[2])
-			pass
 
 		case "download":
 			download(argv[2])
